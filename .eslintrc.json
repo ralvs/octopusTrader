@@ -1,0 +1,18 @@
+{
+  "extends": [
+    "wesbos"
+  ],
+  "rules": {
+    "prettier/prettier": [
+      "error",
+      {
+        "arrowParens": "avoid",
+        "jsxSingleQuote": true,
+        "singleQuote": true,
+        "semi": false,
+        "printWidth": 110
+      }
+    ],
+    "no-case-declarations": 0
+  }
+}
