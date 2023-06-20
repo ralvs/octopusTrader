@@ -1,106 +1,90 @@
 import supabase from './supabase.js'
 
-const orderHandler = (msg, client, { id, orders }, masterEquity, masterPosition) =>
-  msg.map(m => {
+const orderHandler = (queue, msg, client, { id, orders }, masterEquity, masterPosition) =>
+  msg.forEach(async m => {
     switch (m.orderStatus) {
       case 'New':
       case 'Filled':
-        return async () => {
-          let clientQty = '0'
-          let equity = null
+        let clientQty = '0'
+        let equity = null
 
-          // ################################################
-          // starting positions or open limit orders
-          if (!m.reduceOnly) {
-            const balance = await client.getWalletBalance({
-              accountType: 'CONTRACT',
-              coin: 'USDT',
-            })
+        // ################################################
+        // starting positions or open limit orders
+        if (!m.reduceOnly) {
+          const balance = await client.getWalletBalance({
+            accountType: 'CONTRACT',
+            coin: 'USDT',
+          })
 
-            equity = balance.result.list[0].coin[0].equity
-            clientQty = ((equity * m.qty) / masterEquity).toFixed(8)
-          } else {
-            // ################################################
-            // close position completely
-
-            // // close all opened orders
-            // if (m.qty === masterPosition) {
-            //   // didn't use 'await' to keep going faster
-            //   client.cancelAllOrders({
-            //     category: 'linear',
-            //     symbol: m.symbol,
-            //   })
-
-            //   const { data, error } = await supabase
-            //     .from('Client')
-            //     .update({ orders: {} })
-            //     .eq('id', id)
-            //     .select()
-            //   console.log('🚀 ~ data:', data)
-            //   if (error) console.log('🚀 ~ error updating users orders:', error)
-            // }
-
-            const positionInfo = await client.getPositionInfo({
-              category: 'linear',
-              symbol: m.symbol,
-            })
-
-            const x = positionInfo.result.list[0].size
-            clientQty = m.qty === masterPosition ? x : ((x * m.qty) / masterPosition).toFixed(8)
-          }
-          // ################################################
-
-          const params = {
+          equity = balance.result.list[0].coin[0].equity
+          clientQty = ((equity * m.qty) / masterEquity).toFixed(8)
+        } else {
+          // making partial profit or closing position
+          const positionInfo = await client.getPositionInfo({
             category: 'linear',
             symbol: m.symbol,
-            orderType: m.orderType,
-            orderLinkId: orders[m.orderId] || '',
-            price: m.price,
-            side: m.side,
-            stopLoss: m.stopLoss,
-            takeProfit: m.takeProfit,
-            reduceOnly: m.reduceOnly,
-          }
+          })
 
-          // orders.includes(m.orderId)
-          // orders.push(m.orderId)
-          // orders.splice(orders.indexOf(m.orderId))
-          if (m.orderStatus === 'New' && orders[m.orderId]) return client.amendOrder(params)
+          const x = positionInfo.result.list[0].size
+          clientQty = m.qty === masterPosition ? x : ((x * m.qty) / masterPosition).toFixed(8)
+        }
+        // ################################################
 
-          if (m.orderStatus === 'New') orders[m.orderId] = m.orderId
-          else delete orders[m.orderId]
+        const params = {
+          category: 'linear',
+          symbol: m.symbol,
+          orderType: m.orderType,
+          orderLinkId: orders[m.orderId] ? m.orderId : '',
+          price: m.price,
+          // ...(isQtyChanged && { qty: clientQty }),
+          side: m.side,
+          stopLoss: m.stopLoss,
+          takeProfit: m.takeProfit,
+          reduceOnly: m.reduceOnly,
+        }
 
-          const { error } = await supabase
-            .from('Client')
-            .update({
-              ...(equity && { equity }),
-              orders,
-            })
-            .eq('id', id)
-          if (error) console.log('🚀 ~ error updating users orders 111:', error)
+        if (m.orderStatus === 'New' && orders[m.orderId]) {
+          queue.add(() => client.amendOrder(params))
+          return
+        }
 
-          return client.submitOrder({
+        if (m.orderStatus === 'New') orders[m.orderId] = true
+        else delete orders[m.orderId] // orderStatus=Filled and !orders[m.orderId]
+
+        const { error } = await supabase
+          .from('Client')
+          .update({
+            ...(equity && { equity }),
+            orders,
+          })
+          .eq('id', id)
+        if (error) console.log('🚀 ~ error updating users orders 111:', error)
+
+        queue.add(() =>
+          client.submitOrder({
             ...params,
             qty: clientQty,
-            orderLinkId: orders[m.orderId] || '',
+            orderLinkId: orders[m.orderId] ? m.orderId : '',
           })
-        }
+        )
+
+        break
 
       case 'Cancelled':
-        return async () => {
-          if (!orders[m.orderId]) return true
+        if (!orders[m.orderId]) return true
 
-          const tmp = orders[m.orderId]
-          delete orders[m.orderId]
-          const { error } = await supabase.from('Client').update({ orders }).eq('id', id)
-          if (error) console.log('🚀 ~ error updating users orders 222:', error)
+        delete orders[m.orderId]
+        const { error2 } = await supabase.from('Client').update({ orders }).eq('id', id)
+        if (error2) console.log('🚀 ~ error updating users orders 222:', error2)
 
-          return client.cancelOrder({
+        queue.add(() =>
+          client.cancelOrder({
             category: 'linear',
             symbol: m.symbol,
-            orderLinkId: tmp,
+            orderLinkId: m.orderId,
           })
-        }
+        )
+        break
 
       case 'Untriggered': // setting stop/take from open position
       case 'Deactivated': // removing stop/take
@@ -109,7 +93,7 @@ const orderHandler = (msg, client, { id, orders }, masterEquity, masterPosition)
         if (m.stopOrderType === 'StopLoss') stop = m.orderStatus === 'Deactivated' ? '0' : m.triggerPrice
         if (m.stopOrderType === 'TakeProfit') take = m.orderStatus === 'Deactivated' ? '0' : m.triggerPrice
 
-        return () =>
+        queue.add(() =>
           client.setTradingStop({
             category: 'linear',
             symbol: m.symbol,
@@ -117,9 +101,11 @@ const orderHandler = (msg, client, { id, orders }, masterEquity, masterPosition)
             takeProfit: take, // '0' = clear | NaN = to ignore
             positionIdx: 0, // one-way mode
           })
+        )
+        break
 
       default:
-        return () => true
+        break
     }
   })
 

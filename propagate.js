@@ -4,8 +4,8 @@ import orderHandler from './handleOrders.js'
 
 // ########################
 
-const positionHandler = (msg, client) => [
-  () =>
+const positionHandler = (queue, msg, client) => {
+  queue.add(() =>
     client.switchIsolatedMargin({
       category: 'linear',
       symbol: msg[0].symbol,
@@ -13,60 +13,45 @@ const positionHandler = (msg, client) => [
       buyLeverage: msg[0].leverage,
       sellLeverage: msg[0].leverage,
       // sellLeverage: msg[1] ? msg[1].leverage : msg[0].leverage, // usando edge-mode
-    }),
-  () =>
+    })
+  )
+
+  queue.add(() =>
     client.setLeverage({
       category: 'linear',
       symbol: msg[0].symbol,
       buyLeverage: msg[0].leverage,
       sellLeverage: msg[0].leverage,
-    }),
-  // () =>
+    })
+  )
+
+  // queue.add(() =>
   //   client.cancelAllOrders({
   //     category: 'linear',
   //     symbol: msg[0].symbol,
-  //   }),
-]
+  //   })
+  // )
+}
 
 // ###########################################################################
 // ###########################################################################
 
-const propagate = async (msg, masterEquity, masterPosition) => {
+const propagate = async (queue, msg, masterEquity, masterPosition) => {
   const { data: users, error } = await supabase
     .from('Client')
     .select('id, key, secret, testnet, equity, orders')
   if (error) throw new Error(error)
-  // console.log('🚀 ~ ', users)
 
-  const toAllUsers = users.reduce((toRun, user) => {
+  users.forEach(async user => {
     const client = new RestClientV5({
       key: user.key,
       secret: user.secret,
       testnet: user.testnet,
     })
 
-    if (msg.topic === 'position') toRun.push(...positionHandler(msg.data, client))
-    if (msg.topic === 'order')
-      toRun.push(...orderHandler(msg.data, client, user, masterEquity, masterPosition))
-
-    return toRun
-  }, [])
-
-  console.time('Executing all')
-  return (
-    Promise.allSettled(toAllUsers.map(f => f()))
-      .then(out => {
-        console.log('🚀 ~ out:', out)
-        // console.dir(out, { depth: null, colors: true })
-        console.log('🚀 ~ FINISH ON CLIENTS')
-        console.timeEnd('Executing all')
-      })
-      // .then(out => console.dir(out, { depth: null, colors: true }))
-      .catch(err => console.log('END Error: ', err))
-  )
+    if (msg.topic === 'position') positionHandler(queue, msg.data, client)
+    if (msg.topic === 'order') await orderHandler(queue, msg.data, client, user, masterEquity, masterPosition)
+  })
 }
-
-// ###########################################################################
-// ###########################################################################
 
 export { propagate }

@@ -22,7 +22,8 @@
   "description": "",
   "dependencies": {
     "@supabase/supabase-js": "^2.25.0",
-    "bybit-api": "^3.6.0"
+    "bybit-api": "^3.6.0",
+    "p-queue": "^7.3.4"
   },
   "devDependencies": {
     "eslint-config-wesbos": "^3.2.3"
