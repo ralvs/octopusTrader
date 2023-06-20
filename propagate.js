@@ -31,7 +31,7 @@ const positionHandler = (msg, client) => [
 // ###########################################################################
 // ###########################################################################
 
-const sender = async (msg, masterEquity, masterPosition) => {
+const propagate = async (msg, masterEquity, masterPosition) => {
   const { data: users, error } = await supabase
     .from('Client')
     .select('id, key, secret, testnet, equity, orders')
@@ -52,15 +52,14 @@ const sender = async (msg, masterEquity, masterPosition) => {
     return toRun
   }, [])
 
-  const start = performance.now()
-
+  console.time('Executing all')
   return (
     Promise.allSettled(toAllUsers.map(f => f()))
-      .then(() => {
+      .then(out => {
+        console.log('🚀 ~ out:', out)
         // console.dir(out, { depth: null, colors: true })
         console.log('🚀 ~ FINISH ON CLIENTS')
-        const end = performance.now()
-        console.log(`🚀 🚀 🚀 🚀 🚀 ~ Execution time: ${end - start} ms`)
+        console.timeEnd('Executing all')
       })
       // .then(out => console.dir(out, { depth: null, colors: true }))
       .catch(err => console.log('END Error: ', err))
@@ -70,4 +69,4 @@ const sender = async (msg, masterEquity, masterPosition) => {
 // ###########################################################################
 // ###########################################################################
 
-export { sender }
+export { propagate }

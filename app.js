@@ -1,5 +1,5 @@
 import { WebsocketClient } from 'bybit-api'
-import { sender } from './sender.js'
+import { propagate } from './propagate.js'
 import supabase from './supabase.js'
 
 const { data, error } = await supabase.from('Master').select()
@@ -25,6 +25,7 @@ master.subscribeV5('order', 'linear')
 // Listen to events coming from websockets. This is the primary data source
 master.on('update', async msg => {
   if (msg.topic === 'wallet' && msg.data[0].coin[0].coin === 'USDT') {
+    if (equity === msg.data[0].coin[0].equity) return
     equity = msg.data[0].coin[0].equity
 
     const { error } = await supabase.from('Master').update({ equity }).eq('id', id)
@@ -55,7 +56,7 @@ master.on('update', async msg => {
   }
 
   console.log('\n\n\n', msg)
-  sender(msg, equity, positions[msg.data[0].symbol]?.size || '0')
+  propagate(msg, equity, positions[msg.data[0].symbol]?.size || '0')
 })
 
 // Optional: Listen to websocket connection open event (automatic after subscribing to one or more topics)

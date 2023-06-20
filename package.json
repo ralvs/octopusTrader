@@ -4,7 +4,7 @@
   "main": "app.js",
   "type": "module",
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "start": "node app.js",
@@ -22,9 +22,7 @@
   "description": "",
   "dependencies": {
     "@supabase/supabase-js": "^2.25.0",
-    "bybit-api": "^3.6.0",
-    "ccxt": "^3.1.41",
-    "express": "^4.18.2"
+    "bybit-api": "^3.6.0"
   },
   "devDependencies": {
     "eslint-config-wesbos": "^3.2.3"
