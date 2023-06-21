@@ -1,6 +1,13 @@
+import { RestClientV5 } from 'bybit-api'
 import supabase from './supabase.js'
 
-const orderHandler = (queue, msg, client, { id, orders }, masterEquity, masterPosition) =>
+const orderWorker = (queue, { key, secret, testnet, id, orders }, msg, masterEquity, masterPosition) => {
+  const client = new RestClientV5({
+    key,
+    secret,
+    testnet,
+  })
+
   msg.forEach(async m => {
     switch (m.orderStatus) {
       case 'New':
@@ -37,6 +44,7 @@ const orderHandler = (queue, msg, client, { id, orders }, masterEquity, masterPo
           orderLinkId: orders[m.orderId] ? m.orderId : '',
           price: m.price,
           // ...(isQtyChanged && { qty: clientQty }),
+          qty: clientQty,
           side: m.side,
           stopLoss: m.stopLoss,
           takeProfit: m.takeProfit,
@@ -44,6 +52,7 @@ const orderHandler = (queue, msg, client, { id, orders }, masterEquity, masterPo
         }
 
         if (m.orderStatus === 'New' && orders[m.orderId]) {
+          console.log('🚀 ~ params:', params)
           queue.add(() => client.amendOrder(params))
           return
         }
@@ -108,5 +117,5 @@ const orderHandler = (queue, msg, client, { id, orders }, masterEquity, masterPo
         break
     }
   })
-
-export default orderHandler
+}
+export default orderWorker
