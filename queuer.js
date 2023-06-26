@@ -9,6 +9,8 @@ const queuer = async (queue, msg, masterEquity, masterPosition) => {
   if (error) throw new Error(error)
 
   users.forEach(async user => {
+    if (user.key.length !== 18 || user.secret.length !== 36) return // nothing to do here
+
     if (msg.topic === 'position') positionWorker(msg.data, user, queue)
     if (msg.topic === 'order') orderWorker(queue, user, msg.data, masterEquity, masterPosition)
   })

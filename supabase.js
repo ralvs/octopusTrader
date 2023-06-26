@@ -10,11 +10,41 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   },
 })
 
+// NEEDED BECAUSE OF POLICES
+// const { error } = await supabase.auth.signInWithPassword({
+//   email: 'octopus@trader.com',
+//   password: 'asdfasdfasdf',
+// })
+// console.log('🚀 ~ logging error:', error)
+
+export default supabase
+
 /// ###### gambiarra pra limpar campo da tabela
 // const { data, error } = await supabase.from('Client').update({ orders: {} }).eq('testnet', 'true')
 // console.log('🚀 ~ data:', data)
 // console.log('🚀 ~ error:', error)
 
-export default supabase
+//
+//
+//
+//
+//
+// "AUTOMATED" SIGNUP USER
 
-// GELwINbHmzZZ6Msn
+// const { data, error } = await supabase.auth.signUp({
+//   email: 'qwer@gmail.com',
+//   password: 'qwerqwer',
+// })
+
+// if (!error && data.user?.id) {
+//   const { data: client, err } = await supabase
+//     .from('Client')
+//     .insert([{ name: 'asdfasdf', equity: 25, user_id: data.user.id, testnet: true }])
+//     .select()
+
+//   if (err) console.log('🚀 ~ err:', err)
+//   else console.log('🚀 ~ client:', client)
+// } else {
+//   console.log('🚀 ~ data:', data)
+//   console.log('🚀 ~ error:', error)
+// }
