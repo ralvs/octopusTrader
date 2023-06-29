@@ -11,18 +11,18 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 })
 
 // NEEDED BECAUSE OF POLICES
-// const { error } = await supabase.auth.signInWithPassword({
-//   email: 'octopus@trader.com',
-//   password: 'asdfasdfasdf',
-// })
-// console.log('🚀 ~ logging error:', error)
+const { error } = await supabase.auth.signInWithPassword({
+  email: 'octopus@trader.com',
+  password: 'asdfasdfasdf',
+})
+console.log('🚀 ~ logging error:', error)
 
 export default supabase
 
 /// ###### gambiarra pra limpar campo da tabela
-// const { data, error } = await supabase.from('Client').update({ orders: {} }).eq('testnet', 'true')
+// const { data, error2 } = await supabase.from('Client').update({ orders: {} }).eq('testnet', 'true')
 // console.log('🚀 ~ data:', data)
-// console.log('🚀 ~ error:', error)
+// console.log('🚀 ~ error:', error2)
 
 //
 //

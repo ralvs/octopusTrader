@@ -1,29 +1,6 @@
 import { WebsocketClient } from 'bybit-api'
-// eslint-disable-next-line import/no-unresolved
-import PQueue from 'p-queue'
 import queuer from './queuer.js'
 import supabase from './supabase.js'
-
-const queue = new PQueue({ concurrency: 200 })
-
-// ###################################################
-// ###################################################
-// just for debugging
-queue.on('add', () => {
-  // console.log(`Add - Size: ${queue.size}  Pending: ${queue.pending}`)
-  if (queue.size === 1 && queue.pending === 0) {
-    console.time('DONE')
-    console.log('LETSGO')
-  }
-})
-
-queue.on('completed', result => {
-  // console.log('🚀 ~ result:', result)
-  // console.log(`Completed - Size: ${queue.size}  Pending: ${queue.pending}`)
-  if (queue.size === 0 && queue.pending === 1) console.timeEnd('DONE')
-})
-// ###################################################
-// ###################################################
 
 const { data, error } = await supabase.from('Master').select()
 if (error) throw new Error(error)
@@ -79,7 +56,7 @@ master.on('update', async msg => {
   }
 
   // console.log('\n\n\n', msg)
-  queuer(queue, msg, equity, positions[msg.data[0].symbol]?.size || '0')
+  queuer(msg, equity, positions[msg.data[0].symbol]?.size || '0')
 })
 
 // Optional: Listen to websocket connection open event (automatic after subscribing to one or more topics)

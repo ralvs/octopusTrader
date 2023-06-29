@@ -1,19 +1,107 @@
+import { QueueEvents, Queue } from 'bullmq'
+import dotenv from 'dotenv'
 import supabase from './supabase.js'
-import orderWorker from './orderWorker.js'
-import positionWorker from './positionWorder.js'
+// import getQueues from './bull-board.js'
 
-const queuer = async (queue, msg, masterEquity, masterPosition) => {
+dotenv.config()
+
+console.log(Math.floor(new Date().getTime() / 1000))
+const connection = { host: process.env.REDIS_HOST, port: 6379, password: process.env.REDIS_PASS }
+
+const queueOrder = new Queue('order', { connection })
+const queuePosition = new Queue('position', { connection })
+
+// await queueOrder.obliterate() // FORCED CLEAN UP
+// await queuePosition.obliterate() // FORCED CLEAN UP
+
+// ##########################
+// Dashboard
+// getQueues([queueOrder, queuePosition])
+// ##########################
+
+const queuer = async (msg, masterEquity, masterPosition) => {
   const { data: users, error } = await supabase
     .from('Client')
     .select('id, key, secret, testnet, equity, orders')
   if (error) throw new Error(error)
+  console.log('🚀 ~ users:', users.length)
 
-  users.forEach(async user => {
+  let breaks = 2
+  for (const user of users) {
+    breaks -= 1
+    if (breaks === 0) return
+
     if (user.key.length !== 18 || user.secret.length !== 36) return // nothing to do here
 
-    if (msg.topic === 'position') positionWorker(msg.data, user, queue)
-    if (msg.topic === 'order') orderWorker(queue, user, msg.data, masterEquity, masterPosition)
+    if (msg.topic === 'order')
+      await queueOrder.add(
+        user.id,
+        { user, msg: msg.data, masterEquity, masterPosition, epoch: Date.now() },
+        { removeOnComplete: 1000, removeOnFail: 5000 }
+      )
+
+    if (msg.topic === 'position')
+      await queuePosition.add(
+        user.id,
+        { user, msg: msg.data, epoch: Date.now() },
+        { removeOnComplete: 1000, removeOnFail: 5000 }
+      )
+  }
+}
+
+//
+// ####################################################
+//
+// https://api.docs.bullmq.io/interfaces/QueueEventsListener.html#added
+
+//
+// ####################################################
+//
+
+const eventProcessor = qe => {
+  let isRunning = false
+
+  // qe.on('waiting', ({ jobId }) => {
+  //   console.log(`A job with ID ${jobId} is waiting`)
+  // })
+
+  // eslint-disable-next-line no-unused-vars
+  qe.on('added', ({ jobId, name }) => {
+    if (!isRunning) {
+      isRunning = true
+      console.time('DONE')
+      console.log('🚀 ~ START:')
+      // console.log(`Job ${jobId} - ${name} ->> isRunning: ${isRunning}`)
+    }
+  })
+  qe.on('drained', async () => {
+    isRunning = false
+    console.timeEnd('DONE')
+    // console.log(`Job DRAINED, isRunning ${isRunning}`)
+    // const counts = await queueOrder.getJobCounts('wait', 'completed', 'failed')
+    // const types = await queueOrder.getJobCountByTypes()
+    // console.log('🚀 ~ counts:', counts)
+    // console.log('🚀 ~ types:', types)
+  })
+
+  // qe.on('active', ({ jobId, prev }) => {
+  //   console.log(`Job ${jobId} is now active; previous status was ${prev}`)
+  // })
+
+  // qe.on('completed', ({ jobId, returnvalue }) => {
+  //   console.log(`${jobId} has completed and returned ${returnvalue}`)
+  // })
+
+  qe.on('failed', ({ jobId, failedReason }) => {
+    console.log(`${jobId} has failed with reason ${failedReason}`)
+    console.dir(failedReason, { depth: null })
   })
 }
+
+const queueEventsOrd = new QueueEvents('order', { connection })
+eventProcessor(queueEventsOrd)
+
+const queueEventsPos = new QueueEvents('position', { connection })
+eventProcessor(queueEventsPos)
 
 export default queuer
