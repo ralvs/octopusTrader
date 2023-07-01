@@ -15,7 +15,8 @@ const { error } = await supabase.auth.signInWithPassword({
   email: 'octopus@trader.com',
   password: 'asdfasdfasdf',
 })
-console.log('🚀 ~ logging error:', error)
+if (error) console.log('🚀 ~ logging error:', error)
+else console.log('Logged to Supabase!')
 
 export default supabase
 

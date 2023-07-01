@@ -2,6 +2,9 @@
   "extends": [
     "wesbos"
   ],
+  "env": {
+    "node": true
+  },
   "rules": {
     "prettier/prettier": [
       "error",

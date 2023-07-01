@@ -1,15 +1,19 @@
 import { QueueEvents, Queue } from 'bullmq'
 import dotenv from 'dotenv'
+// import populateRepeat from './populateRepeat.js'
 import supabase from './supabase.js'
 // import getQueues from './bull-board.js'
 
 dotenv.config()
 
-console.log(Math.floor(new Date().getTime() / 1000))
 const connection = { host: process.env.REDIS_HOST, port: 6379, password: process.env.REDIS_PASS }
 
 const queueOrder = new Queue('order', { connection })
 const queuePosition = new Queue('position', { connection })
+
+// Review: should I do this way? Maybe is a waste of VM resources
+// const queueRepeat = new Queue('repeat', { connection })
+// populateRepeat(queueRepeat)
 
 // await queueOrder.obliterate() // FORCED CLEAN UP
 // await queuePosition.obliterate() // FORCED CLEAN UP
@@ -23,14 +27,11 @@ const queuer = async (msg, masterEquity, masterPosition) => {
   const { data: users, error } = await supabase
     .from('Client')
     .select('id, key, secret, testnet, equity, orders')
+    // .eq('master', 'da1e7685-5ba6-4cde-8695-501fb35de05d') // Todo: filter From a Master
+    .eq('id', 'da1e7685-5ba6-4cde-8695-501fb35de05d') // Review: remove breaks
   if (error) throw new Error(error)
-  console.log('🚀 ~ users:', users.length)
 
-  let breaks = 2
   for (const user of users) {
-    breaks -= 1
-    if (breaks === 0) return
-
     if (user.key.length !== 18 || user.secret.length !== 36) return // nothing to do here
 
     if (msg.topic === 'order')
@@ -93,8 +94,8 @@ const eventProcessor = qe => {
   // })
 
   qe.on('failed', ({ jobId, failedReason }) => {
-    console.log(`${jobId} has failed with reason ${failedReason}`)
-    console.dir(failedReason, { depth: null })
+    console.log(`${jobId} has failed with reason: ${failedReason}`)
+    console.log('🚀 ~ ', failedReason.message || '', failedReason.cause || '')
   })
 }
 
