@@ -1,6 +1,17 @@
 import { RestClientV5 } from 'bybit-api'
 import supabase from './supabase.js'
 
+// Get all coins qty step
+const info = await fetch(
+  'https://api.bybit.com/v5/market/instruments-info?category=linear&basecoin=USDT'
+).then(res => res.json())
+if (info.retMsg !== 'OK') throw new Error('Error getting qty steps', { cause: info })
+
+const steps = info.result.list.reduce(
+  (tot, item) => ({ ...tot, [item.symbol]: item.lotSizeFilter.qtyStep }),
+  {}
+)
+
 const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEquity, masterPosition) => {
   const client = new RestClientV5({
     key,
@@ -32,8 +43,8 @@ const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEqui
         })
         if (balance.retMsg !== 'OK') throw new Error('Error getting balance', { cause: balance })
 
-        equity = balance.result.list[0].coin[0]?.equity || 0
-        clientQty = ((equity * m.qty) / masterEquity).toFixed(8)
+        equity = balance.result.list[0].coin[0]?.walletBalance || 0
+        clientQty = (equity * m.qty) / masterEquity
         //
         //
       } else {
@@ -46,7 +57,7 @@ const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEqui
           throw new Error('Error getting position size', { cause: positionInfo })
 
         const x = positionInfo.result.list[0].size
-        clientQty = m.qty === masterPosition ? x : ((x * m.qty) / masterPosition).toFixed(8)
+        clientQty = m.qty === masterPosition ? x : (x * m.qty) / masterPosition
       }
       // ###########################
 
@@ -56,7 +67,7 @@ const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEqui
         orderType: m.orderType,
         orderLinkId: orders[m.orderId] ? m.orderId : '',
         price: m.price,
-        // ...(isQtyChanged && { qty: clientQty }),
+        qty: (Math.round(clientQty / steps[m.symbol]) * steps[m.symbol]).toFixed(5),
         side: m.side,
         stopLoss: m.stopLoss,
         takeProfit: m.takeProfit,
@@ -69,7 +80,6 @@ const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEqui
 
       const reply = await client.submitOrder({
         ...params,
-        qty: clientQty,
         orderLinkId: orders[m.orderId] ? m.orderId : '',
       })
       if (reply.retMsg !== 'OK') throw new Error('Error submiting order', { cause: reply })
@@ -77,10 +87,7 @@ const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEqui
       // saving just after the order has placed correctly
       const { error } = await supabase
         .from('Client')
-        .update({
-          ...(equity && { equity }),
-          orders,
-        })
+        .update({ ...(equity && { equity }), orders })
         .eq('id', id)
       if (error) throw new Error('Error saving submit order', { cause: error })
 
@@ -116,16 +123,23 @@ const workerOrder = async ({ key, secret, testnet, id, orders }, msg, masterEqui
     ) {
       let stop = NaN
       let take = NaN
+      // let trailing = NaN
       if (m.stopOrderType === 'StopLoss') stop = m.orderStatus === 'Deactivated' ? '0' : m.triggerPrice
       if (m.stopOrderType === 'TakeProfit') take = m.orderStatus === 'Deactivated' ? '0' : m.triggerPrice
+      // if (m.stopOrderType === 'TrailingStop')
+      // trailing = m.orderStatus === 'Deactivated' ? '0' : (m.lastPriceOnCreated - m.triggerPrice).toFixed(5)
 
-      return client.setTradingStop({
+      const params = {
         category: m.category,
         symbol: m.symbol,
         stopLoss: stop, // '0' = clear | NaN = to ignore
         takeProfit: take, // '0' = clear | NaN = to ignore
+        // trailingStop: trailing, // '0' = clear | NaN = to ignore
         positionIdx: 0, // one-way mode
-      })
+      }
+
+      return client.setTradingStop(params)
+      // ### for trailling stop, need to save in order[m.orderId]
     }
   }
 }
